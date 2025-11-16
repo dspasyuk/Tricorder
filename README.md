@@ -21,8 +21,9 @@ This project turns an ESP32 and a DFRobot AS7341 spectral sensor into a web-base
 
 ## Hardware
 <img width="541" height="603" alt="Screenshot from 2025-10-19 20-16-00" src="https://github.com/user-attachments/assets/bc63433d-a392-40e3-9af1-195b6592eda2" />
+<img width="493" height="683" alt="image" src="https://github.com/user-attachments/assets/6252c4b7-7798-43c4-ab43-1621cfdd74fd" />
 
-*   **Microcontroller:** ESP32
+*   **Microcontroller:** ESP32 (S3 or Dev)
 *   **Sensor:** DFRobot AS7341 Visible Light Sensor
 
 ## How to Use

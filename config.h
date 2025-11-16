@@ -1,9 +1,14 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+// Include libraries INSIDE the header guard
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
+
+// I2C pins for AS7341 sensor
+#define SDA_PIN 2
+#define SCL_PIN 3
 
 // Global objects
 extern WebServer server;

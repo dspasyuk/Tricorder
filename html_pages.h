@@ -8,26 +8,27 @@ const char MAIN_PAGE_START[] PROGMEM = R"rawliteral(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tricorder</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+  <script src="/echarts.min.js""></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; margin: 0; }
-    .navbar { background: #fff; padding: 0 20px; border-bottom: 1px solid #dcdfe6; display: flex; justify-content: space-between; align-items: center; min-height: 60px; flex-wrap: wrap; }
+    .navbar { background: #fff; padding: 0 20px 20px 20px; border-bottom: 1px solid #dcdfe6; display: flex; justify-content: space-between; align-items: center; min-height: 60px; flex-wrap: wrap; }
     .navbar-brand { font-size: 22px; font-weight: 600; color: #303133; }
     .navbar-menu { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
-    .nav-item { padding: 8px 12px; cursor: pointer; border-radius: 5px; transition: background 0.3s; font-size: 14px; border: 1px solid transparent; white-space: nowrap; }
-    .nav-item.primary { background: #409eff; color: white; border-color: #409eff; }
+    .nav-item { padding: 8px 12px; cursor: pointer; border-radius: 5px; transition: background 0.3s; font-size: 14px; border: 1px solid transparent; white-space: nowrap; text-decoration: none; }
+    .nav-item.primary { background: #ffa33a; color: white; border-color: #409eff; }
+    .nav-item.border {border:1px solid #dcdfe6; }
     .nav-item.primary:hover { background: #66b1ff; border-color: #66b1ff; }
-    .nav-item.success { background: #67c23a; color: white; border-color: #67c23a; }
-    .nav-item.success:hover { background: #85ce61; border-color: #85ce61; }
-    .nav-item.danger { background: #f56c6c; color: white; border-color: #f56c6c; }
-    .nav-item.danger:hover { background: #f78989; border-color: #f78989; }
-    .nav-item.action { border: 1px solid #dcdfe6; color: #606266; }
+    .nav-item.success { background: #ab47bc; color: white; }
+    .nav-item.success:hover { background: #85ce61;  }
+    .nav-item.danger { background: #f56c6c; color: white;  }
+    .nav-item.danger:hover { background: #f78989; }
+    .nav-item.action {background: #df3f3b; border: 1px solid #dcdfe6; color: #606266; }
     .nav-item.action:hover { background: #ecf5ff; color: #409eff; }
     .content { padding: 5px; }
     #chart { width: 100%; height: calc(100vh - 100px); background: #fff; border-radius: 8px; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1); }
     .form-group { display: flex; align-items: center; gap: 8px; }
     .form-group label { font-size: 14px; color: #606266; }
-    .form-group input { width: 50px; padding: 8px; border-radius: 4px; border: 1px solid #dcdfe6; font-size: 14px; }
+    .form-group input { width: 35px; padding: 5px; border-radius: 4px; border: 1px solid #dcdfe6; font-size: 14px; }
     #status { padding: 10px; padding-top:5px; font-size: 14px; color: #709399; text-align: center; }
     #color-swatch { width: 38px; height: 38px; background: #eee; border: 1px solid #dcdfe6; border-radius: 5px; }
   </style>
@@ -38,23 +39,22 @@ const char MAIN_PAGE_START[] PROGMEM = R"rawliteral(
     <div class="navbar-menu">
       <div id="color-swatch" title="Estimated Color"></div>
       <div class="form-group">
-        <label for="accumTime">Accum (s):</label>
-        <input type="number" id="accumTime" min="1" max="60" onchange="saveConfig()">
+        <label for="accumTime">🕤</label>
+        <input type="number" id="accumTime" min="1" value="1" max="60" onchange="saveConfig()">
       </div>
       <div class="form-group">
-        <label for="scanInterval">Interval (s):</label>
-        <input type="number" id="scanInterval" min="1" max="3600" onchange="saveConfig()">
+        <label for="scanInterval">Int:</label>
+        <input type="number" id="scanInterval" value="1" min="1" max="3600" onchange="saveConfig()">
       </div>
-      <div class="nav-item primary" id="startBtn" onclick="startCollection(false)">▶ Scan</div>
-      <div class="nav-item success" id="contBtn" onclick="toggleContinuousScan()">∞ Continuous</div>
-      <div class="nav-item action" onclick="clearChart()">■ Clear</div>
-      <div class="nav-item action" onclick="saveData()">💾 Save</div>
-      <div class="nav-item action" onclick="resetWifi()">⚙ Reset</div>
-      <div class="form-group">
-        <label for="light-checkbox">Light:</label>
+      <div class="nav-item border primary" id="startBtn" onclick="startCollection(false)">◀️</div>
+      <div class="nav-item success border" id="contBtn" onclick="toggleContinuousScan()">♾️</div>
+      <div class="nav-item action border" onclick="clearChart()">🆑</div>
+      <div class="nav-item border" onclick="saveData()">💾</div>
+      <a href="/config" class="nav-item border">⚙️</a>
+      <div class="form-group border">
+        <label for="light-checkbox">💡</label>
         <input type="checkbox" id="light-checkbox" onchange="toggleLight()">
-      </div>
-      <div class="wifi-badge">📡 )rawliteral";
+      </div> )rawliteral";
 
 const char MAIN_PAGE_END[] PROGMEM = R"rawliteral(</div>
     </div>
@@ -112,7 +112,7 @@ const char MAIN_PAGE_END[] PROGMEM = R"rawliteral(</div>
       initialOption = {
         title: { text: 'Spectrum Analysis', left: 'center' },
         tooltip: { trigger: 'axis', formatter: params => `Wavelength: ${params[0].value[0].toFixed(1)} nm<br/>Intensity: ${params[0].value[1].toFixed(4)}` },
-        legend: { top: 30, type: 'scroll' },
+        legend: { top: 40, type: 'scroll' },
         toolbox: {
           right: 20,
           feature: {
@@ -122,13 +122,13 @@ const char MAIN_PAGE_END[] PROGMEM = R"rawliteral(</div>
           }
         },
         xAxis: {
-          type: 'value', name: 'Wavelength (nm)', nameLocation: 'middle', nameGap: 35, min: 400, max: 1000
+          type: 'value', name: 'Wavelength (nm)', nameLocation: 'middle', nameGap: 40, min: 300, max: 1000
         },
         yAxis: {
-          type: 'value', name: 'Intensity', nameLocation: 'middle', nameGap: 50, min: 0
+          type: 'value', name: 'Intensity', nameLocation: 'middle', nameGap: 35, min: 0
         },
         series: [],
-        grid: { left: 90, right: 60, top: 80, bottom: 70 }
+        grid: { left: 50, right: 50, top: 80, bottom: 70 }
       };
       chart.setOption(initialOption);
     }
@@ -145,7 +145,7 @@ const char MAIN_PAGE_END[] PROGMEM = R"rawliteral(</div>
             // Stop scanning
             clearInterval(continuousScanIntervalId);
             continuousScanIntervalId = null;
-            contBtn.textContent = '∞ Continuous';
+            contBtn.textContent = '∞';
             contBtn.classList.remove('danger');
             contBtn.classList.add('success');
             document.getElementById('status-text').textContent = 'Continuous scan stopped.';
@@ -165,6 +165,54 @@ const char MAIN_PAGE_END[] PROGMEM = R"rawliteral(</div>
         }
     }
 
+    // Function to convert wavelength to RGB color
+    function wavelengthToRGB(wavelength) {
+      let r, g, b;
+      
+      if (wavelength >= 380 && wavelength < 440) {
+        r = -(wavelength - 440) / (440 - 380);
+        g = 0;
+        b = 1;
+      } else if (wavelength >= 440 && wavelength < 490) {
+        r = 0;
+        g = (wavelength - 440) / (490 - 440);
+        b = 1;
+      } else if (wavelength >= 490 && wavelength < 510) {
+        r = 0;
+        g = 1;
+        b = -(wavelength - 510) / (510 - 490);
+      } else if (wavelength >= 510 && wavelength < 580) {
+        r = (wavelength - 510) / (580 - 510);
+        g = 1;
+        b = 0;
+      } else if (wavelength >= 580 && wavelength < 645) {
+        r = 1;
+        g = -(wavelength - 645) / (645 - 580);
+        b = 0;
+      } else if (wavelength >= 645 && wavelength <= 780) {
+        r = 1;
+        g = 0;
+        b = 0;
+      } else {
+        r = 0;
+        g = 0;
+        b = 0;
+      }
+      
+      // Intensity adjustment for edges of visible spectrum
+      let intensity = 1;
+      if (wavelength >= 380 && wavelength < 420) {
+        intensity = 0.3 + 0.7 * (wavelength - 380) / (420 - 380);
+      } else if (wavelength >= 700 && wavelength <= 780) {
+        intensity = 0.3 + 0.7 * (780 - wavelength) / (780 - 700);
+      }
+      
+      r = Math.round(r * intensity * 255);
+      g = Math.round(g * intensity * 255);
+      b = Math.round(b * intensity * 255);
+      
+      return `rgb(${r}, ${g}, ${b})`;
+    }
     function startCollection(isContinuous = false) {
       const startBtn = document.getElementById('startBtn');
       const status = document.getElementById('status-text');
@@ -214,12 +262,31 @@ const char MAIN_PAGE_END[] PROGMEM = R"rawliteral(</div>
               return points;
           }
 
-          const rawChannelsSeries = data.raw.map(channelData => ({
-              name: 'Raw Channels',
-              type: 'line',
-              data: generateGaussian(channelData[0], channelData[1]),
-              smooth: true, showSymbol: false, lineStyle: { width: 2, opacity: 0.6 }, areaStyle: { opacity: 0.1 }, tooltip: { show: false }
-          }));
+// Generate colored raw channels series
+const rawChannelsSeries = data.raw
+  .filter((channelData, idx) => idx < 8) // Only visible spectrum channels (skip NIR)
+  .map(channelData => {
+    const wavelength = channelData[0];
+    const color = wavelengthToRGB(wavelength);
+    
+    return {
+      name: 'Raw Channels',
+      type: 'line',
+      data: generateGaussian(channelData[0], channelData[1]),
+      smooth: true,
+      showSymbol: false,
+      lineStyle: { 
+        width: 2.5, 
+        opacity: 0.7,
+        color: color
+      },
+      areaStyle: { 
+        opacity: 0.15,
+        color: color
+      },
+      tooltip: { show: false }
+    };
+  });
 
           const newSeries = {
             name: new Date().toLocaleTimeString(),

@@ -1,10 +1,30 @@
 #include "config.h"
+#include <Wire.h>
 #include "DFRobot_AS7341.h"
 #include <ArduinoJson.h>
+#include "echarts_min_js.h"
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// OLED Display Configuration
+#define OLED_SDA 5
+#define OLED_SCL 6
+#define OLED_RESET -1
+#define SCREEN_ADDRESS 0x3C
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define DISPLAY_OFFSET_X 28
+#define DISPLAY_OFFSET_Y 15
+#define USABLE_WIDTH 72
+#define USABLE_HEIGHT 40
+
+// Create display object
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Scan timing
 unsigned long scanStartTime = 0;
 unsigned long scanElapsedTime = 0;
+unsigned long lastDisplayUpdate = 0;
 
 // Global object definitions
 WebServer server(80);
@@ -20,7 +40,7 @@ bool apMode = false;
 bool collecting = false;
 unsigned int accumulationTime = 1; // seconds
 unsigned int scanInterval = 2; // seconds
-const int interpolationPoints = 100; // Number of points for the smooth curve
+const int interpolationPoints = 100;
 
 // AS7341 channel center wavelengths (nm)
 const float channelWavelengths[10] = {
@@ -34,10 +54,62 @@ const char* channelNames[10] = {
 
 // Store raw and normalized readings
 float normalizedReadings[10] = {0};
-float interpolatedSpectrum[interpolationPoints][2]; // Array to store [wavelength, intensity]
+float interpolatedSpectrum[interpolationPoints][2];
 
 DFRobot_AS7341::sModeOneData_t data1;
 DFRobot_AS7341::sModeTwoData_t data2;
+
+// Display helper function - prints text at offset coordinates
+void displayPrint(int x, int y, const char* text) {
+  display.setCursor(DISPLAY_OFFSET_X + x, DISPLAY_OFFSET_Y + y);
+  display.print(text);
+}
+
+void displayPrintln(int x, int y, const char* text) {
+  display.setCursor(DISPLAY_OFFSET_X + x, DISPLAY_OFFSET_Y + y);
+  display.println(text);
+}
+
+// Update OLED display with current status
+void updateDisplay() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  
+  // Line 1: WiFi Status
+  displayPrint(0, 0, apMode ? "AP Mode" : "WiFi OK");
+  
+  // Line 2: IP or status
+  if (!apMode && WiFi.status() == WL_CONNECTED) {
+    displayPrint(0, 10, WiFi.localIP().toString().c_str());
+  } else if (apMode) {
+    displayPrint(0, 10, "192.168.4.1");
+  }
+  
+  // Line 3: Collection status
+  if (collecting) {
+    displayPrint(0, 20, "SCANNING");
+  } else {
+    displayPrint(0, 20, "Ready");
+  }
+  
+  // Line 4: Show peak channel
+  if (normalizedReadings[0] > 0) {
+    float maxVal = 0;
+    int maxIdx = 0;
+    for (int i = 0; i < 8; i++) { // Only visible channels
+      if (normalizedReadings[i] > maxVal) {
+        maxVal = normalizedReadings[i];
+        maxIdx = i;
+      }
+    }
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%.0fnm", channelWavelengths[maxIdx]);
+    displayPrint(0, 30, buf);
+  }
+  
+  display.display();
+}
 
 // Cubic interpolation for smoother curves (Catmull-Rom spline)
 float cubicInterpolate(float p0, float p1, float p2, float p3, float t) {
@@ -57,6 +129,10 @@ void readAndAccumulate() {
   unsigned long startTime = millis();
 
   Serial.println("Starting accumulation...");
+  
+  // Update display to show scanning
+  collecting = true;
+  updateDisplay();
 
   while (millis() - startTime < accumulationTime * 1000) {
     as7341.startMeasure(as7341.eF1F4ClearNIR);
@@ -77,7 +153,7 @@ void readAndAccumulate() {
     accumulatedReadings[9] += data1.ADCLEAR;
     
     readingCount++;
-    delay(50); // Small delay between readings
+    delay(50);
   }
 
   Serial.print("Accumulated ");
@@ -88,41 +164,59 @@ void readAndAccumulate() {
   float avgReadings[10];
   for (int i = 0; i < 10; i++) {
     avgReadings[i] = (readingCount > 0) ? (float)accumulatedReadings[i] / readingCount : 0;
-    normalizedReadings[i] = avgReadings[i]; // Directly assign without normalization
+    normalizedReadings[i] = avgReadings[i];
   }
+  
+  collecting = false;
+  updateDisplay();
 }
 
 // Get interpolated value at a specific wavelength
 float getInterpolatedValue(float wavelength) {
-    // Use an array of the 8 visible channels for interpolation
     const float visWavelengths[] = {415, 445, 480, 515, 555, 590, 630, 680};
     const int numVisChannels = 8;
 
-    if (wavelength <= visWavelengths[0]) return normalizedReadings[0];
-    if (wavelength >= visWavelengths[numVisChannels - 1]) return normalizedReadings[numVisChannels - 1];
+    float extendedWavelengths[numVisChannels + 2];
+    float extendedReadings[numVisChannels + 2];
+
+    extendedWavelengths[0] = 380;
+    extendedReadings[0] = 0.0;
+
+    for (int i = 0; i < numVisChannels; i++) {
+        extendedWavelengths[i + 1] = visWavelengths[i];
+        extendedReadings[i + 1] = normalizedReadings[i];
+    }
+
+    extendedWavelengths[numVisChannels + 1] = 750;
+    extendedReadings[numVisChannels + 1] = 0.0;
+
+    const int numExtendedPoints = numVisChannels + 2;
+
+    if (wavelength <= extendedWavelengths[0]) return extendedReadings[0];
+    if (wavelength >= extendedWavelengths[numExtendedPoints - 1]) return extendedReadings[numExtendedPoints - 1];
 
     int lowerIdx = 0;
-    for (int i = 0; i < numVisChannels - 1; i++) {
-        if (wavelength >= visWavelengths[i] && wavelength <= visWavelengths[i + 1]) {
+    for (int i = 0; i < numExtendedPoints - 1; i++) {
+        if (wavelength >= extendedWavelengths[i] && wavelength <= extendedWavelengths[i + 1]) {
             lowerIdx = i;
             break;
         }
     }
 
-    float t = (wavelength - visWavelengths[lowerIdx]) / (visWavelengths[lowerIdx + 1] - visWavelengths[lowerIdx]);
+    float t = (wavelength - extendedWavelengths[lowerIdx]) / (extendedWavelengths[lowerIdx + 1] - extendedWavelengths[lowerIdx]);
 
-    float p0 = (lowerIdx > 0) ? normalizedReadings[lowerIdx - 1] : normalizedReadings[lowerIdx];
-    float p1 = normalizedReadings[lowerIdx];
-    float p2 = normalizedReadings[lowerIdx + 1];
-    float p3 = (lowerIdx < numVisChannels - 2) ? normalizedReadings[lowerIdx + 2] : normalizedReadings[lowerIdx + 1];
+    float p0 = (lowerIdx > 0) ? extendedReadings[lowerIdx - 1] : extendedReadings[lowerIdx];
+    float p1 = extendedReadings[lowerIdx];
+    float p2 = extendedReadings[lowerIdx + 1];
+    float p3 = (lowerIdx < numExtendedPoints - 2) ? extendedReadings[lowerIdx + 2] : extendedReadings[lowerIdx + 1];
 
     return cubicInterpolate(p0, p1, p2, p3, t);
 }
 
 // Generate the interpolated spectrum
 void generateInterpolatedSpectrum() {
-  float minWavelength = 415;
-  float maxWavelength = 680;
+  float minWavelength = 380;
+  float maxWavelength = 750;
   float step = (maxWavelength - minWavelength) / (interpolationPoints - 1);
 
   for (int i = 0; i < interpolationPoints; i++) {
@@ -148,7 +242,6 @@ void handleLight() {
     String state = server.arg("state");
     if (state == "on") {
       as7341.enableLed(true);
-      //as7341.setLedCurrent(10);
       server.send(200, "text/plain", "Light ON");
     } else {
       as7341.enableLed(false);
@@ -161,22 +254,68 @@ void handleLight() {
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);
 
+  // --- OLED Display Initialization (First!) ---
+  Serial.println("Initializing OLED Display...");
+  Wire.begin(OLED_SDA, OLED_SCL);
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println("OLED init failed!");
+  } else {
+    Serial.println("OLED initialized!");
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    displayPrintln(0, 0, "Spectro");
+    displayPrintln(0, 10, "meter");
+    displayPrintln(0, 20, "Starting");
+    display.display();
+  }
+
+  // --- I2C and Sensor Initialization ---
+  Serial.println("Initializing Sensor...");
+  // Reinitialize Wire for sensor on different pins
+  Wire.end();
+  Wire.begin(SDA_PIN, SCL_PIN);
+  
   while (as7341.begin() != 0) {
     Serial.println("Could not find AS7341 sensor! Check wiring.");
+    
+    // Show error on display
+    Wire.end();
+    Wire.begin(OLED_SDA, OLED_SCL);
+    display.clearDisplay();
+    displayPrintln(0, 0, "Sensor");
+    displayPrintln(0, 10, "Error!");
+    display.display();
+    Wire.end();
+    Wire.begin(SDA_PIN, SCL_PIN);
+    
     delay(3000);
   }
+  
   Serial.println("AS7341 sensor found!");
-
   as7341.setAtime(100);
   as7341.setAGAIN(128);
   as7341.setAstep(999);
   as7341.enableSpectralMeasure(true);
 
+  // --- WiFi Initialization ---
+  Serial.println("Initializing WiFi...");
   preferences.begin("wifi-config", false);
   ssid = preferences.getString("ssid", "");
   password = preferences.getString("password", "");
   preferences.end();
+
+  // Update display during WiFi connection
+  Wire.end();
+  Wire.begin(OLED_SDA, OLED_SCL);
+  display.clearDisplay();
+  displayPrintln(0, 0, "Connect");
+  displayPrintln(0, 10, "WiFi...");
+  display.display();
+  Wire.end();
+  Wire.begin(SDA_PIN, SCL_PIN);
 
   if (ssid.length() > 0) {
     Serial.println("Attempting to connect to saved WiFi...");
@@ -192,6 +331,7 @@ void setup() {
   }
 
   if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Starting AP mode.");
     startAPMode();
   } else {
     Serial.println("Connected to WiFi!");
@@ -200,7 +340,18 @@ void setup() {
     apMode = false;
   }
 
+  // --- Server Initialization ---
+  Serial.println("Initializing HTTP server...");
   server.on("/", handleRoot);
+  
+  server.on("/echarts.min.js", HTTP_GET, [](){
+    server.sendHeader("Content-Encoding", "gzip");
+    server.sendHeader("Cache-Control", "max-age=86400");
+    server.send_P(200, "application/javascript", 
+                  (const char*)ECHARTS_JS_GZ, 
+                  ECHARTS_JS_GZ_LEN);
+  });
+  
   server.on("/config", handleConfig);
   server.on("/save-wifi", HTTP_POST, handleSaveWifi);
   server.on("/start", handleStart);
@@ -210,11 +361,28 @@ void setup() {
   server.on("/reset-wifi", handleResetWifi);
   server.on("/status", handleStatus);
   server.on("/light", handleLight);
-
+  
   server.begin();
-  Serial.println("HTTP server started");
+  Serial.println("HTTP server started. Tricorder is ready.");
+  
+  // Final display update
+  Wire.end();
+  Wire.begin(OLED_SDA, OLED_SCL);
+  updateDisplay();
+  Wire.end();
+  Wire.begin(SDA_PIN, SCL_PIN);
 }
 
 void loop() {
   server.handleClient();
+  
+  // Update display every 2 seconds
+  if (millis() - lastDisplayUpdate > 2000) {
+    Wire.end();
+    Wire.begin(OLED_SDA, OLED_SCL);
+    updateDisplay();
+    Wire.end();
+    Wire.begin(SDA_PIN, SCL_PIN);
+    lastDisplayUpdate = millis();
+  }
 }

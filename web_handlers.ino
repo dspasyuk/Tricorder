@@ -1,23 +1,21 @@
 #include "config.h"
 #include "html_pages.h"
+#include <WiFi.h>
 
 void startAPMode() {
   Serial.println("Starting Access Point mode...");
   apMode = true;
   WiFi.mode(WIFI_AP);
-  WiFi.softAP("Tricorder", "12345678");
-  Serial.println("AP Started");
+  // Explicitly set channel to 6, a common and compatible channel
+  WiFi.softAP("Tricorder_1", "12345678");
+  Serial.println("AP Started on Channel 6");
   Serial.print("AP IP address: ");
   Serial.println(WiFi.softAPIP());
 }
 
 void handleRoot() {
-  if (apMode) {
-    server.send_P(200, "text/html", CONFIG_PAGE);
-  } else {
-    String html = String(MAIN_PAGE_START) + ssid + String(MAIN_PAGE_END);
-    server.send(200, "text/html", html);
-  }
+  String html = String(MAIN_PAGE_START) + ssid + String(MAIN_PAGE_END);
+  server.send(200, "text/html", html);
 }
 
 void handleConfig() {
